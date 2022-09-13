@@ -13,14 +13,18 @@
 // Date: Fall 2022
 //----------------------------------------------------------------------------
 
+
 // Constants
+const char headerChar = '\n';
+const char stopChar   = '\n';
 const long maxCharLength = 200 + 2; // Actual max string length + start and stop characters
-const int freqOutputPin = 11; // OC2A output pin for ATmega328 boards
+const int  freqOutputPin = 11; // OC2A output pin for ATmega328 boards
+const long symbolCycles  = 1000000; // TODO: Number of base clock cycles per data symbol
 
 // Main loop variables
 String data_string;
 bool data_is_valid;
-bool bitstream[maxCharLength];
+int bitstream[maxCharLength];
 
 void setup()
 {
@@ -46,6 +50,7 @@ void setup()
     OCR2A = 1;
 }
 
+// Simple data sending mechanism for testing
 void sendDataSimple(String _data_string){
   _data_string.trim(); // Remove any \r \n whitespace at the end of the String
   if (_data_string == "0") {
@@ -57,43 +62,100 @@ void sendDataSimple(String _data_string){
   }
 }
 
-bool convertStringToBitStream(String _data_string, bool * bitstream){
-  Serial.println("Converting to bitstream");
-  // Remove any \r \n whitespace at the end of the String
-  _data_string.trim();
+// Send a bitstream using FSK modulation scheme
+void sendData(int * bitstream){
+  int idx = 0;
+  int bit = bitstream[idx];
+  // While data is valid
+  while(bit != 2){
+    // Change OCR2A value to change output frequency
+      // TODO
 
-  int data_len = _data_string.length();
-  // Verify string isn't too long
-  if (data_len + 2 > maxCharLength){
-    Serial.print("Error: Data length exceeds maximum character length of ");
-    Serial.print(maxCharLength - 2);
-    Serial.println(".");
+    // Calculate how long to wait to change OCR2A
+      // TODO
 
-    return false; // Return error status
+    // Get next bit
+    idx++;
+    bit = bitstream[idx];
   }
+}
+
+// Insert the binary representation of character c into the bitstream at given pointer/index
+void insertCharBits(char c, int * bitstream){
+  for(uint8_t j = 0; j < 8; j++) {
+    // Calculate index into bitstream
+    long bitstream_idx = (7-j);
+    // Store current bit
+    bool cur_bit = (c & (1 << j));
+    Serial.print((int) cur_bit);
+    bitstream[bitstream_idx] = cur_bit;
+  }
+}
+
+// Convert a given string to its binary format in an array of bools
+void convertStringToBitStream(String _data_string, int * bitstream){
+  Serial.println("Converting to bitstream");
+
+  // Append header char (newline)
+  insertCharBits(headerChar, bitstream);
 
   char cur_char;
   bool cur_char_bits[8];
   // Iterate through the characters in the string
-  for(int i =0; i < _data_string.length(); i++ ) {
+  for(int i =1; i <= _data_string.length(); i++ ) {
     cur_char = _data_string[i];
-    Serial.print("Char: ");
+    Serial.print("\nChar: ");
     Serial.println(cur_char);
-
-    // Convert to bit representation
-
-    // Add current char bits to output bitstream
+    Serial.print("Binary: ");
+    // Append current character's bits to bit representation
+    insertCharBits(cur_char, &bitstream[i*8]);
   }
-  return true;
+
+  // Append end of data char (newline)
+  insertCharBits(stopChar, &bitstream[(_data_string.length() + 1) * 8]);
+  bitstream[(_data_string.length() + 1) * 8 + 1] = 2; // End of valid data flag
 }
+
+void startDataTransmission(){
+  // Setup timer and compare to trigger ISR at set symbol rate
+
+  // Start timer
+}
+
+// Updating data ISR
+// ISR(){
+  // Check for valid data
+  // Increment bitstream pointer and cast to int
+
+  // Change OCR2A? value if valid
+
+  // Stop timer for sending data if invalid
+
+  // Reset something?
+// }
 
 void loop() {
   Serial.println("\nEnter data:");
   while (Serial.available() == 0) {} // Wait for data available
   data_string = Serial.readString(); // Read until timeout
-  data_is_valid = convertStringToBitStream(data_string, bitstream); // Modulate and send the data string
-  if (data_is_valid) {
-    sendDataSimple(data_string);
+
+  // Remove any \r \n whitespace at the end of the String
+  data_string.trim();
+
+  // Verify string isn't too long
+  if (data_string.length() > maxCharLength){
+    Serial.print("Error: Data length exceeds maximum character length of ");
+    Serial.print(maxCharLength - 2);
+    Serial.println(".");
   }
+  // Else if valid data
+  else {
+    // Modulate and send the data string
+    convertStringToBitStream(data_string, bitstream);
+    sendDataSimple(data_string);
+    // sendData(bitstream);
+  }
+
+  // Wait for serial things to finish
   delay(200);
 }

@@ -20,6 +20,7 @@
 // Date: Fall 2022
 //----------------------------------------------------------------------------
 
+
 // these are checked for in the main program
 volatile unsigned long timerCounts;
 volatile boolean counterReady;
@@ -37,12 +38,12 @@ unsigned long toc;
 // TODO: Move this to an ISR as well
 void startCounting (unsigned int ms)
   {
-  counterReady = false;         // time not up yet
-  timerPeriod = ms;             // how many 1 ms counts to do
-  timerTicks = 0;               // reset interrupt counter
-  overflowCount = 0;            // no overflows yet
+  counterReady = false; // time not up yet
+  timerPeriod = ms;     // how many 1 ms counts to do
+  timerTicks = 0;       // reset interrupt counter
+  overflowCount = 0;    // no overflows yet
 
-  // reset Timer 1 and Timer 2
+  // Reset Timer 1 and Timer 2
   TCCR1A = 0;
   TCCR1B = 0;
   TCCR2A = 0;
@@ -163,6 +164,7 @@ void loop ()
   float frq = (timerCounts *  1000.0) / timerPeriod;
   int data;
 
+  // Dead simple modulation scheme
   if(frq > 2500000){
     data = 1;
   }
@@ -180,6 +182,6 @@ void loop ()
   TCCR0A = oldTCCR0A;
   TCCR0B = oldTCCR0B;
 
-  // let serial stuff finish
+  // Wait for serial stuff to finish
   delay(1000);
   }   // End of loop
