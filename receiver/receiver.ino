@@ -24,23 +24,22 @@
 // Timer-tracking variables
 volatile unsigned long timerCounts;
 const int timerCountsSize = 100;
+const int validDataFreqCutoff = 700; // Cutoff frequency delineating valid and rest data in MHz
 int timerCountsIdx = 0;
 unsigned long timerCountsArray[timerCountsSize];
 volatile boolean counterReady;
+volatile boolean prevValidData, curValidData;
 unsigned long overflowCount;
 unsigned int timerTicks;
 unsigned int timerPeriod;
+int timerCountsValidCutoff;
 
-// Timing Metrics
-// TODO: Implement
-unsigned long tic;
-unsigned long toc;
-
-// TODO: Move this to an ISR as well
+// TODO: Move this to an ISR as well?
 void startCounting (unsigned int ms)
   {
   counterReady = false; // time not up yet
-  timerPeriod = 0;     // how many 1 ms counts to do
+  timerPeriod = ms;      // how many 1 ms counts to do
+  timerCountsValidCutoff = validDataFreqCutoff * ms;
   timerTicks = 0;       // reset interrupt counter
   overflowCount = 0;    // no overflows yet
 
@@ -56,13 +55,12 @@ void startCounting (unsigned int ms)
   // Timer 2 - gives us our 1 ms counting interval
   // TODO: Alter prescaling?
   // 16 MHz clock (62.5 ns per tick) - prescaled by 128
-  //  counter increments every 8 µs.
+  // counter increments every 8 µs.
   // So we count 125 of them, giving exactly 1000 µs (1 ms)
   TCCR2A = bit (WGM21) ;   // 21CTC mode
   // TODO: Change this
   // Set output compare register to the value to count up to (zero relative!)
-  // OCR2A  = 124;
-  OCR2A
+  OCR2A  = 124;
 
   // Set the Timer2 Compare Match A Interrupt Enable pin
   // to enable the interrupt at the desired frequency
@@ -85,18 +83,15 @@ void startCounting (unsigned int ms)
   TCCR1B =  bit (CS10) | bit (CS11) | bit (CS12);
   }  // End of startCounting
 
-ISR (TIMER1_OVF_vect)
-  {
-    // Increment number of Counter1 overflows
-    ++overflowCount;
-  }  // End of TIMER1_OVF_vect
+ISR (TIMER1_OVF_vect){
+  ++overflowCount; // Increment number of Counter1 overflows
+}  // End of TIMER1_OVF_vect
 
 
 //******************************************************************
 //  Timer2 Interrupt Service is invoked by hardware Timer 2 every 1 ms = 1000 Hz
 //  Timer2 ISR Frequency = Base Clock Frequency / Timer2 Prescaler / (OCR2A + 1)
 //  16Mhz / 128 / 125 = 1000 Hz
-
 ISR (TIMER2_COMPA_vect)
   {
   // Grab counter value before it changes anymore
@@ -110,6 +105,7 @@ ISR (TIMER2_COMPA_vect)
   unsigned long overflowCopy = overflowCount;
 
   // Exit early if we haven't reached timing period
+  // This accounts for multiples of milliseconds counted
   if (++timerTicks < timerPeriod)
     return;
 
@@ -117,7 +113,7 @@ ISR (TIMER2_COMPA_vect)
   if ((TIFR1 & bit (TOV1)) && timer1CounterValue < 256)
     overflowCopy++;
 
-  // end of gate time, measurement ready
+  // End of gate time, measurement ready
 
   // Stop Timer 1
   TCCR1A = 0;    // stop timer 1
@@ -138,14 +134,22 @@ ISR (TIMER2_COMPA_vect)
   // Set global flag for end count period
   // TODO: To make continuous operation, remove this and handle appropriately
   counterReady = true;
+
+  // If the number of counts is less than 500, this indicates start of valid data
+  // Store previous valid data state
+  prevValidData = curValidData;
+  // Update current valid data state
+  curValidData = (timerCounts > timerCountsValidCutoff) ? 0 : 1;
   }  // End of TIMER2_COMPA_vect
 
+// Return frequency in MHz corresponding to the number of counts
 float countsToFreq(unsigned long timerCounts){
-  return (timerCounts *  1000.0) / timerPeriod;
+  return (timerCounts *  1000.0) / (timerPeriod * 1000);
 }
 
+// Return bit value corresponding to frequency
 int freqToBit(float freq){
-  if(freq > 2500000){
+  if(freq > 140){
     return 1;
   }
   else{
@@ -153,11 +157,65 @@ int freqToBit(float freq){
   }
 }
 
+// Print counts, frequency, and associated bit value of a number of rising edges
+void printCountsData(int counts){
+  Serial.print("Rising Edges: ");
+  Serial.print(counts);
+  Serial.print("\tFreq: ");
+  float freq = countsToFreq(counts);
+  Serial.print(freq);
+  Serial.print(" MHz\tBit: ");
+  Serial.println(freqToBit(freq));
+}
+
+void processValidData(int endDataIdx){
+  Serial.print("Received data of bit length: ");
+  Serial.println(endDataIdx);
+
+  // Print every count, frequency, and bit
+  for(int idx=0; idx<=endDataIdx; idx++){
+    printCountsData(timerCountsArray[idx]);
+  }
+
+  // Print bit values in byte groups
+  for(int idx=0; idx<=endDataIdx; idx++){
+    int bit = freqToBit(countsToFreq(timerCountsArray[idx]));
+    // If beginning of new byte
+    if(idx != 0 && idx % 8 == 0){
+      Serial.println();
+    }
+    Serial.print(bit);
+  }
+  Serial.println();
+
+  Serial.println("ASCII Encoding:");
+
+  // TODO: Convert bitstream to bytes and write to serial
+
+  boolean array[8] = {false, false, true, false, false, false, false, true};
+
+  byte result = 0;
+
+  for(int i=0; i<8; i++){
+      if(array[i]){
+        result |= (1 << (7-i));
+      }
+  }
+
+  Serial.write(result);
+  Serial.println();
+
+  Serial.println("\nDone processing data. Waiting for more input...\n");
+}
+
 void setup ()
   {
   Serial.begin(115200);
-  Serial.println("Receiver Program Startup\n");
+  Serial.println("Receiver Program Startup");
+  Serial.println("Waiting for data transmission...");
 
+  prevValidData = false; // Waiting for frequency trigger to indicate data start
+  curValidData  = false;
   } // End of setup
 
 void loop ()
@@ -170,112 +228,32 @@ void loop ()
   TCCR0A = 0;
   TCCR0B = 0;
 
-  // TODO: Change input to be in
-  startCounting (1);  // how many ms to count for
+  startCounting (1);  // Count number of rising edges every X milliseconds
 
   while (!counterReady){} // Busy loop until count over
 
-  // Add current timerCounts to array
-  timerCountsArray[timerCountsIdx] = timerCounts;
+  // printCountsData(timerCounts);
+  if(curValidData){
+    // Serial.println("Valid Data!------------------------");
+    if(!prevValidData){
+      // Serial.println("\n\nStarting to read data...");
+      timerCountsIdx = 0; // Reset timer counts index on valid data start
+    }
+    // Add current timerCounts to array
+    timerCountsArray[timerCountsIdx] = timerCounts;
 
-  // If just filled timerCountsArray, display array
-  if (timerCountsIdx == timerCountsSize - 1){
-    Serial.println ("---------- Printing Collected data!!! -------");
-    unsigned long counts;
-    float _freq;
-    int _data;
-    Serial.println (timerCountsArray[0]);
-    Serial.println (timerCountsArray[1]);
-    Serial.println (timerCountsArray[2]);
-    Serial.println (timerCountsArray[3]);
-    Serial.println (timerCountsArray[4]);
-    Serial.println (timerCountsArray[5]);
-    Serial.println (timerCountsArray[6]);
-    Serial.println (timerCountsArray[7]);
-    Serial.println (timerCountsArray[8]);
-    Serial.println (timerCountsArray[9]);
-    Serial.println (timerCountsArray[10]);
-    Serial.println (timerCountsArray[11]);
-    Serial.println (timerCountsArray[12]);
-    Serial.println (timerCountsArray[13]);
-    Serial.println (timerCountsArray[14]);
-    Serial.println (timerCountsArray[15]);
-    Serial.println (timerCountsArray[16]);
-    Serial.println (timerCountsArray[17]);
-    Serial.println (timerCountsArray[18]);
-    Serial.println (timerCountsArray[19]);
-    Serial.println (timerCountsArray[20]);
-    Serial.println (timerCountsArray[21]);
-    Serial.println (timerCountsArray[22]);
-    Serial.println (timerCountsArray[23]);
-    Serial.println (timerCountsArray[24]);
-    Serial.println (timerCountsArray[25]);
-    Serial.println (timerCountsArray[26]);
-    Serial.println (timerCountsArray[27]);
-    Serial.println (timerCountsArray[28]);
-    Serial.println (timerCountsArray[29]);
-    Serial.println (timerCountsArray[30]);
-    Serial.println (timerCountsArray[31]);
-    Serial.println (timerCountsArray[32]);
-    Serial.println (timerCountsArray[33]);
-    Serial.println (timerCountsArray[34]);
-    Serial.println (timerCountsArray[35]);
-    Serial.println (timerCountsArray[36]);
-    Serial.println (timerCountsArray[37]);
-    Serial.println (timerCountsArray[38]);
-    Serial.println (timerCountsArray[39]);
-    Serial.print (countsToFreq(timerCountsArray[39]));
-    Serial.println(" Hz");
-
-    // delay(1000);
-    // for(int idx=0; idx++; idx<2){
-    //   Serial.print ((int) idx);
-
-      // counts = timerCountsArray[idx];
-      // Serial.print ("\nCounts: ");
-      // Serial.print (counts);
-
-      // _freq = countsToFreq(counts);
-      // _data = freqToBit(_freq);
-
-
-      // Serial.print ("  Frequency: ");
-      // Serial.print ( _freq);
-      // Serial.print (" Hz.");
-      // Serial.print ("  Data: ");
-      // Serial.println (_data);
-      // delay(200);
-    // }
-    // delay(1000);
+    // Increment index with rollover
+    // Shouldn't need rollover but better than out of bounds access
+    timerCountsIdx = (timerCountsIdx + 1) % timerCountsSize;
+  } else {
+    // If done getting valid data
+    if(prevValidData){
+      // Process valid data acquired
+      processValidData(timerCountsIdx - 1);
+    }
   }
-  // Increment index with rollover
-  timerCountsIdx = (timerCountsIdx + 1) % timerCountsSize;
-
-  // Adjust counts by counting interval to give frequency in Hz
-  // TODO: Change 1000 in accordance with above
-  // float frq = (timerCounts *  1000.0) / timerPeriod;
-  // int data;
-
-  // // Dead simple modulation scheme
-  // if(frq > 2500000){
-  //   data = 1;
-  // }
-  // else{
-  //   data = 0;
-  // }
-
-  // Serial.print ("\nFrequency: ");
-  // Serial.print ((unsigned long) frq);
-  // Serial.println (" Hz.");
-  // Serial.print ("Data: ");
-  // Serial.println (data);
 
   // Restart timer 0
   TCCR0A = oldTCCR0A;
   TCCR0B = oldTCCR0B;
-
-
-
-  // Wait for serial stuff to finish
-  // delay(1000);
   }   // End of loop
