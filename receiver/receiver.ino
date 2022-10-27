@@ -35,8 +35,7 @@ unsigned int timerPeriod;
 int timerCountsValidCutoff;
 
 // TODO: Move this to an ISR as well?
-void startCounting (unsigned int ms)
-  {
+void startCounting (unsigned int ms){
   counterReady = false; // time not up yet
   timerPeriod = ms;      // how many 1 ms counts to do
   timerCountsValidCutoff = validDataFreqCutoff * ms;
@@ -92,8 +91,7 @@ ISR (TIMER1_OVF_vect){
 //  Timer2 Interrupt Service is invoked by hardware Timer 2 every 1 ms = 1000 Hz
 //  Timer2 ISR Frequency = Base Clock Frequency / Timer2 Prescaler / (OCR2A + 1)
 //  16Mhz / 128 / 125 = 1000 Hz
-ISR (TIMER2_COMPA_vect)
-  {
+ISR (TIMER2_COMPA_vect){
   // Grab counter value before it changes anymore
   // TODO: Make this volatile? Does the initialization of this take time?
   // How are ISR's compiled/handled?
@@ -140,7 +138,7 @@ ISR (TIMER2_COMPA_vect)
   prevValidData = curValidData;
   // Update current valid data state
   curValidData = (timerCounts > timerCountsValidCutoff) ? 0 : 1;
-  }  // End of TIMER2_COMPA_vect
+}  // End of TIMER2_COMPA_vect
 
 // Return frequency in MHz corresponding to the number of counts
 float countsToFreq(unsigned long timerCounts){
@@ -148,12 +146,12 @@ float countsToFreq(unsigned long timerCounts){
 }
 
 // Return bit value corresponding to frequency
-int freqToBit(float freq){
+bool freqToBit(float freq){
   if(freq > 140){
-    return 1;
+    return true;
   }
   else{
-    return 0;
+    return false;
   }
 }
 
@@ -168,58 +166,86 @@ void printCountsData(int counts){
   Serial.println(freqToBit(freq));
 }
 
+// Process valid data once it's been fully received
 void processValidData(int endDataIdx){
+  // Number of bits in the data packet
+  int dataBitSize = endDataIdx + 1;
+  // Data size padded to next smallest multiple of 8
+  int padDataBitSize = ((dataBitSize + 7) >> 3) << 3;
+  // Padded data size in bytes
+  int padDataByteSize = padDataBitSize / 8;
+  // Bitstream storage
+  bool padDataBitArray[padDataBitSize];
+  // Byte storage
+  byte padDataByteArray[padDataByteSize];
+
+  // Serial.print("Pad bit size: ");
+  // Serial.println(padDataBitSize);
+
+  // Serial.print("Pad byte size: ");
+  // Serial.println(padDataByteSize);
+
   Serial.print("Received data of bit length: ");
-  Serial.println(endDataIdx);
+  Serial.println(dataBitSize);
 
   // Print every count, frequency, and bit
+  Serial.println("Each bit's detailed data:");
   for(int idx=0; idx<=endDataIdx; idx++){
     printCountsData(timerCountsArray[idx]);
   }
 
+  Serial.println("\nBit representation:");
   // Print bit values in byte groups
-  for(int idx=0; idx<=endDataIdx; idx++){
-    int bit = freqToBit(countsToFreq(timerCountsArray[idx]));
-    // If beginning of new byte
+  for(int idx=0; idx<padDataBitSize; idx++){
+    // Padded bits are 0
+    bool bit = false;
+
+    if(idx <= endDataIdx){
+      bit = freqToBit(countsToFreq(timerCountsArray[idx]));
+    }
+    // Insert into bitstream array
+    padDataBitArray[idx] = bit;
+    // If beginning of new byte, print on newline
     if(idx != 0 && idx % 8 == 0){
       Serial.println();
     }
+
     Serial.print(bit);
+
+    // Create byte array
+    int i = idx % 8;
+    int byteIdx = floor(idx / 8);
+    if(bit){
+      padDataByteArray[byteIdx] |= (1 << (7-i));
+    }
+    // If last bit in the current byte, display byte as ASCII
+    if(i == 7){
+      Serial.print(" - ");
+      Serial.write(padDataBitArray[byteIdx]);
+    }
   }
   Serial.println();
 
-  Serial.println("ASCII Encoding:");
-
-  // TODO: Convert bitstream to bytes and write to serial
-
-  boolean array[8] = {false, false, true, false, false, false, false, true};
-
-  byte result = 0;
-
-  for(int i=0; i<8; i++){
-      if(array[i]){
-        result |= (1 << (7-i));
-      }
-  }
-
-  Serial.write(result);
+  // Write bytes to serial port to view ASCII representation
+  Serial.println("\nASCII Encoding:");
+  Serial.write(padDataByteArray, padDataByteSize);
   Serial.println();
 
   Serial.println("\nDone processing data. Waiting for more input...\n");
 }
 
-void setup ()
-  {
-  Serial.begin(115200);
-  Serial.println("Receiver Program Startup");
-  Serial.println("Waiting for data transmission...");
+void setup (){
+  long baudrate = 115200;
+  Serial.begin(baudrate);
+  Serial.print("Receiver Program Startup - Baud Rate: ");
+  Serial.println(baudrate);
+  Serial.println("Waiting for data transmission...\n");
 
   prevValidData = false; // Waiting for frequency trigger to indicate data start
   curValidData  = false;
-  } // End of setup
+} // End of setup
 
-void loop ()
-  {
+void loop (){
   // Stop Timer 0 interrupts from throwing the count out
   byte oldTCCR0A = TCCR0A;
   byte oldTCCR0B = TCCR0B;
@@ -233,6 +259,8 @@ void loop ()
   while (!counterReady){} // Busy loop until count over
 
   // printCountsData(timerCounts);
+
+  // If the current bit is valid
   if(curValidData){
     // Serial.println("Valid Data!------------------------");
     if(!prevValidData){
@@ -256,4 +284,4 @@ void loop ()
   // Restart timer 0
   TCCR0A = oldTCCR0A;
   TCCR0B = oldTCCR0B;
-  }   // End of loop
+}   // End of loop
