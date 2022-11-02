@@ -20,13 +20,15 @@
 // Date: Fall 2022
 //----------------------------------------------------------------------------
 
-
+// Print Debug Info
+const bool VERBOSE = true;
 // Timer-tracking variables
 volatile unsigned long timerCounts;
-const int timerCountsSize = 100;
-const int validDataFreqCutoff = 700; // Cutoff frequency delineating valid and rest data in MHz
+const int maxCharacters = 3;
+const int timerCountsSize = maxCharacters * 8 * 4; // Max characters * 8 bits * 4 samples/bit
+const int validDataFreqCutoff = 126; // Cutoff frequency delineating valid and rest data in MHz
 int timerCountsIdx = 0;
-unsigned long timerCountsArray[timerCountsSize];
+uint8_t timerCountsArray[timerCountsSize];
 volatile boolean counterReady;
 volatile boolean prevValidData, curValidData;
 unsigned long overflowCount;
@@ -147,7 +149,7 @@ float countsToFreq(unsigned long timerCounts){
 
 // Return bit value corresponding to frequency
 bool freqToBit(float freq){
-  if(freq > 140){
+  if(freq > 112){
     return true;
   }
   else{
@@ -162,8 +164,57 @@ void printCountsData(int counts){
   Serial.print("\tFreq: ");
   float freq = countsToFreq(counts);
   Serial.print(freq);
-  Serial.print(" MHz\tBit: ");
+  Serial.print(" kHz\tBit: ");
   Serial.println(freqToBit(freq));
+}
+
+int removeTransitions(int endDataIdx){
+  // If missing just one "bit", treat it as good data since just dropped last transition to rest
+  if((endDataIdx + 1) % 4 == 3){
+    if(VERBOSE) Serial.println("Just missed last transition!");
+    endDataIdx++;
+  }
+  // Number of bits in the data packet
+  int dataBitSize = (endDataIdx + 1) / 4;
+
+  if(VERBOSE){
+    Serial.println("Remove transitions:");
+    Serial.print("Received data bit size: ");
+    Serial.println(dataBitSize);
+  }
+
+  bool dataBitArray[dataBitSize];
+
+  for(int i=1; i<=endDataIdx; i+=4){
+    if(VERBOSE){
+      Serial.println(i);
+      printCountsData(timerCountsArray[i]);
+      printCountsData(timerCountsArray[i+1]);
+      printCountsData(timerCountsArray[i+2]);
+      printCountsData(timerCountsArray[i+3]);
+    }
+
+    int averageCounts = (timerCountsArray[i] + timerCountsArray[i+1]) / 2;
+    bool bit = freqToBit(countsToFreq(averageCounts));
+    if(VERBOSE){
+      Serial.print("Bit: ");
+      Serial.println(bit);
+    }
+    dataBitArray[(i - 1) / 4] = bit;
+    // Replace timer counts data with average counts
+    timerCountsArray[(i - 1) / 4] = averageCounts;
+  }
+
+  Serial.println("\nProcessed data:");
+  for(int i=0; i<dataBitSize; i++){
+    Serial.print(dataBitArray[i]);
+    if(i != 0 && i % 8 == 0){
+      Serial.println();
+    }
+  }
+  Serial.println();
+
+  return dataBitSize - 1;
 }
 
 // Process valid data once it's been fully received
@@ -179,22 +230,24 @@ void processValidData(int endDataIdx){
   // Byte storage
   byte padDataByteArray[padDataByteSize];
 
-  // Serial.print("Pad bit size: ");
-  // Serial.println(padDataBitSize);
+  if (VERBOSE){
+    Serial.print("Pad bit size: ");
+    Serial.println(padDataBitSize);
 
-  // Serial.print("Pad byte size: ");
-  // Serial.println(padDataByteSize);
+    Serial.print("Pad byte size: ");
+    Serial.println(padDataByteSize);
 
-  Serial.print("Received data of bit length: ");
-  Serial.println(dataBitSize);
+    Serial.print("Received data of bit length: ");
+    Serial.println(dataBitSize);
 
-  // Print every count, frequency, and bit
-  Serial.println("Each bit's detailed data:");
-  for(int idx=0; idx<=endDataIdx; idx++){
-    printCountsData(timerCountsArray[idx]);
+    // Print every count, frequency, and bit
+    Serial.println("Each bit's detailed data:");
+    for(int idx=0; idx<=endDataIdx; idx++){
+      printCountsData(timerCountsArray[idx]);
+    }
+
+    Serial.println("\nBit representation:");
   }
-
-  Serial.println("\nBit representation:");
   // Print bit values in byte groups
   for(int idx=0; idx<padDataBitSize; idx++){
     // Padded bits are 0
@@ -205,12 +258,15 @@ void processValidData(int endDataIdx){
     }
     // Insert into bitstream array
     padDataBitArray[idx] = bit;
-    // If beginning of new byte, print on newline
-    if(idx != 0 && idx % 8 == 0){
-      Serial.println();
-    }
 
-    Serial.print(bit);
+    if(VERBOSE){
+      // If beginning of new byte, print on newline
+      if(idx != 0 && idx % 8 == 0){
+        Serial.println();
+      }
+
+      Serial.print(bit);
+    }
 
     // Create byte array
     int i = idx % 8;
@@ -218,13 +274,18 @@ void processValidData(int endDataIdx){
     if(bit){
       padDataByteArray[byteIdx] |= (1 << (7-i));
     }
-    // If last bit in the current byte, display byte as ASCII
-    if(i == 7){
-      Serial.print(" - ");
-      Serial.write(padDataBitArray[byteIdx]);
+    if (VERBOSE){
+      // If last bit in the current byte, display byte as ASCII
+      if(i == 7){
+        Serial.print(" - ");
+        Serial.print(byteIdx);
+        Serial.print(" - ");
+        Serial.write(padDataByteArray[byteIdx]);
+      }
     }
   }
-  Serial.println();
+  if(VERBOSE)
+    Serial.println();
 
   // Write bytes to serial port to view ASCII representation
   Serial.println("\nASCII Encoding:");
@@ -277,7 +338,10 @@ void loop (){
     // If done getting valid data
     if(prevValidData){
       // Process valid data acquired
-      processValidData(timerCountsIdx - 1);
+      if(VERBOSE)
+        processValidData(timerCountsIdx - 1);
+      int newBitSize = removeTransitions(timerCountsIdx - 1);
+      processValidData(newBitSize);
     }
   }
 
