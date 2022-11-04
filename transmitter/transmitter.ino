@@ -20,7 +20,7 @@ const char stopChar   = '\n';
 const int  OCR2AHIGH  = 64; // 123 kHz
 const int  OCR2ALOW   = 79; // 100 kHz
 const int  OCR2AREST  = 60; //
-const long maxCharLength = 50;
+const long maxCharLength = 60;
 const int  freqOutputPin = 11; // OC2A output pin for ATmega328 boards
 const long symbolCycles  = 1000000; // TODO: Number of base clock cycles per data symbol
 const long numSyncTransmissions = 5;
@@ -28,7 +28,7 @@ const long numSyncTransmissions = 5;
 // Main loop variables
 String data_string;
 bool data_is_valid;
-int bitstream[maxCharLength];
+uint8_t bitstream[maxCharLength * 8]; // Characters * bits per character
 int string_len = 100;
 uint8_t bitstream_pos = 0;
 volatile long increm = 0;
@@ -119,7 +119,7 @@ int bitToOCR2A(bool bit){
 
 // Insert the OCR2A value corresponding to the binary representation of character c into
 // the bitstream at given pointer/index
-void insertCharBits(char c, volatile int * bitstream){
+void insertCharBits(char c, volatile uint8_t * bitstream){
   for(uint8_t j = 0; j < 8; j++) {
     // Calculate index into bitstream
     long bitstream_idx = (7-j);
@@ -131,7 +131,7 @@ void insertCharBits(char c, volatile int * bitstream){
 }
 
 // Convert a given string to its binary format in an array of bools
-void convertStringToBitStream(String _data_string, volatile int * bitstream){
+void convertStringToBitStream(String _data_string, volatile uint8_t * bitstream){
   Serial.print("Converting \"");
   Serial.print(_data_string);
   Serial.println("\" to bitstream");

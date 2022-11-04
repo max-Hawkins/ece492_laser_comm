@@ -21,12 +21,13 @@
 //----------------------------------------------------------------------------
 
 // Print Debug Info
-const bool VERBOSE = true;
+const bool VERBOSE = false;
 // Timer-tracking variables
 volatile unsigned long timerCounts;
-const int maxCharacters = 3;
+const int maxCharacters = 40;
 const int timerCountsSize = maxCharacters * 8 * 4; // Max characters * 8 bits * 4 samples/bit
-const int validDataFreqCutoff = 126; // Cutoff frequency delineating valid and rest data in MHz
+// Cutoff frequency (in kHz) delineating valid and rest data in MHz
+const int validDataFreqCutoff = 126;
 int timerCountsIdx = 0;
 uint8_t timerCountsArray[timerCountsSize];
 volatile boolean counterReady;
@@ -230,6 +231,17 @@ void processValidData(int endDataIdx){
   // Byte storage
   byte padDataByteArray[padDataByteSize];
 
+  // Zero out padDataByteArray TEST
+  Serial.println("---bytes:");
+  for(int i=0; i<padDataByteSize; i++){
+    padDataByteArray[i] = 0;
+  }
+  // Zero out padDataByteArray TEST
+  Serial.println("---bytes:");
+  for(int i=0; i<padDataByteSize; i++){
+    Serial.println(padDataByteArray[i]);
+  }
+
   if (VERBOSE){
     Serial.print("Pad bit size: ");
     Serial.println(padDataBitSize);
@@ -247,6 +259,12 @@ void processValidData(int endDataIdx){
     }
 
     Serial.println("\nBit representation:");
+  }
+
+  // Zero out padDataByteArray TEST
+  Serial.println("---bytes:");
+  for(int i=0; i<padDataByteSize; i++){
+    Serial.println(padDataByteArray[i]);
   }
   // Print bit values in byte groups
   for(int idx=0; idx<padDataBitSize; idx++){
@@ -280,10 +298,19 @@ void processValidData(int endDataIdx){
         Serial.print(" - ");
         Serial.print(byteIdx);
         Serial.print(" - ");
+        Serial.print(padDataByteArray[byteIdx]);
+        Serial.print(" - ");
         Serial.write(padDataByteArray[byteIdx]);
       }
     }
   }
+
+  // Zero out padDataByteArray TEST
+  Serial.println("---bytes:");
+  for(int i=0; i<padDataByteSize; i++){
+    Serial.println(padDataByteArray[i]);
+  }
+
   if(VERBOSE)
     Serial.println();
 
