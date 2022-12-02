@@ -20,8 +20,11 @@
 // Date: Fall 2022
 //----------------------------------------------------------------------------
 
+// Must be 1, 2, 4, or 8
+#define BITS_PER_SYMBOL 1
 // Print Debug Info
-const bool VERBOSE = false;
+#define VERBOSE false
+
 // Timer-tracking variables
 volatile unsigned long timerCounts;
 const int maxCharacters = 40;
@@ -37,7 +40,7 @@ unsigned int timerTicks;
 unsigned int timerPeriod;
 int timerCountsValidCutoff;
 
-// TODO: Move this to an ISR as well?
+// Start counting the number of rising edges into Timer 1 every 'ms' milliseconds
 void startCounting (unsigned int ms){
   counterReady = false; // time not up yet
   timerPeriod = ms;      // how many 1 ms counts to do
@@ -97,7 +100,7 @@ ISR (TIMER1_OVF_vect){
 ISR (TIMER2_COMPA_vect){
   // Grab counter value before it changes anymore
   // TODO: Make this volatile? Does the initialization of this take time?
-  // How are ISR's compiled/handled?
+  // How are ISR's compiled?
   // See pages 117 and 143 for more info on this and accessing 16-bit registers
   unsigned int timer1CounterValue;
   timer1CounterValue = TCNT1;
@@ -117,7 +120,7 @@ ISR (TIMER2_COMPA_vect){
   // End of gate time, measurement ready
 
   // Stop Timer 1
-  TCCR1A = 0;    // stop timer 1
+  TCCR1A = 0;
   TCCR1B = 0;
 
   // Stop Timer 2
@@ -144,17 +147,65 @@ ISR (TIMER2_COMPA_vect){
 }  // End of TIMER2_COMPA_vect
 
 // Return frequency in MHz corresponding to the number of counts
+// TODO: If make counting period longer, alter this calculation - redundant right now
 float countsToFreq(unsigned long timerCounts){
   return (timerCounts *  1000.0) / (timerPeriod * 1000);
 }
 
-// Return bit value corresponding to frequency
-bool freqToBit(float freq){
-  if(freq > 112){
-    return true;
-  }
-  else{
-    return false;
+// Return symbol value corresponding to frequency
+uint8_t freqToSymbol(float freq){
+  if(BITS_PER_SYMBOL == 1){
+    if(freq > 112){
+        return 1;
+      }else{
+        return 0;
+      }
+  } else if(BITS_PER_SYMBOL == 2){
+      if(freq > ){
+        return 3;
+      }else if(freq > ){
+        return 2;
+      }else if(freq > ){
+        return 1;
+      }else if(freq > ){
+        return 0;
+      }
+  } else if(BITS_PER_SYMBOL == 4){
+      if(freq > ){
+        return 15;
+      }else if(freq > ){
+        return 14;
+      }else if(freq > ){
+        return 13;
+      }else if(freq > ){
+        return 12;
+      }else if(freq > ){
+        return 11;
+      }else if(freq > ){
+        return 10;
+      }else if(freq > ){
+        return 9;
+      }else if(freq > ){
+        return 8;
+      }else if(freq > ){
+        return 7;
+      }else if(freq > ){
+        return 6;
+      }else if(freq > ){
+        return 5;
+      }else if(freq > ){
+        return 4;
+      }else if(freq > ){
+        return 3;
+      }else if(freq > ){
+        return 2;
+      }else if(freq > ){
+        return 1;
+      }else if(freq > ){
+        return 0;
+      }
+  } else if(BITS_PER_SYMBOL == 8){
+    // TODO: If only C had better metaprogramming capabilities :(
   }
 }
 
@@ -165,10 +216,11 @@ void printCountsData(int counts){
   Serial.print("\tFreq: ");
   float freq = countsToFreq(counts);
   Serial.print(freq);
-  Serial.print(" kHz\tBit: ");
-  Serial.println(freqToBit(freq));
+  Serial.print(" kHz\tSymbol: ");
+  Serial.println(freqToSymbol(freq));
 }
 
+// Remove 'exterior' samples and average interior samples to create valid data
 int removeTransitions(int endDataIdx){
   // If missing just one "bit", treat it as good data since just dropped last transition to rest
   if((endDataIdx + 1) % 4 == 3){
@@ -176,7 +228,8 @@ int removeTransitions(int endDataIdx){
     endDataIdx++;
   }
   // Number of bits in the data packet
-  int dataBitSize = (endDataIdx + 1) / 4;
+  int dataSymbolSize = (endDataIdx + 1) / 4;
+  int dataBitSize = dataSymbolSize * BITS_PER_SYMBOL;
 
   if(VERBOSE){
     Serial.println("Remove transitions:");
@@ -194,14 +247,29 @@ int removeTransitions(int endDataIdx){
       printCountsData(timerCountsArray[i+2]);
       printCountsData(timerCountsArray[i+3]);
     }
-
+    // Average "inner" two samples of oversampled input
     int averageCounts = (timerCountsArray[i] + timerCountsArray[i+1]) / 2;
-    bool bit = freqToBit(countsToFreq(averageCounts));
+    uint8_t symbol = freqToSymbol(countsToFreq(averageCounts));
     if(VERBOSE){
-      Serial.print("Bit: ");
-      Serial.println(bit);
+      Serial.print("Symbol: ");
+      Serial.println(symbol);
     }
-    dataBitArray[(i - 1) / 4] = bit;
+    // Iterate through symbol bits and add to output dataBitArray
+    for(int symbol_i=0; symbol_i<BITS_PER_SYMBOL; symbol_i++){
+      // Get current bit in symbol
+      bool cur_bit = symbol & (1 << symbol_i); // TODO
+      // Put current bit into output data array
+      int dataBitArrayIdx = (i - 1) / 4; // TODO
+
+      Serial.print("Symbol_i: ");
+      Serial.print(symbol_i);
+      Serial.print("  cur_bit: ");
+      Serial.print(cur_bit);
+      Serial.print("  dataBitArrayIdx: ");
+      Serial.println(dataBitArrayIdx);
+
+      dataBitArray[dataBitArrayIdx] = cur_bit;
+    }
     // Replace timer counts data with average counts
     timerCountsArray[(i - 1) / 4] = averageCounts;
   }
@@ -267,40 +335,45 @@ void processValidData(int endDataIdx){
     Serial.println(padDataByteArray[i]);
   }
   // Print bit values in byte groups
-  for(int idx=0; idx<padDataBitSize; idx++){
-    // Padded bits are 0
-    bool bit = false;
+  for(int idx=0; idx<padDataBitSize; idx+=BITS_PER_SYMBOL){
+    // Padded symbols are 0
+    uint8_t symbol = 0;
 
     if(idx <= endDataIdx){
-      bit = freqToBit(countsToFreq(timerCountsArray[idx]));
+      symbol = freqToSymbol(countsToFreq(timerCountsArray[idx]));
     }
-    // Insert into bitstream array
-    padDataBitArray[idx] = bit;
+    // Insert bits into bitstream array
+    for(int symbol_i=0; symbol_i<BITS_PER_SYMBOL; symbol_i++){
+      // Get current bit in symbol
+      bool cur_bit = symbol & (1 << symbol_i); // TODO
+      padDataBitArray[idx + symbol_i] = cur_bit;
 
-    if(VERBOSE){
-      // If beginning of new byte, print on newline
-      if(idx != 0 && idx % 8 == 0){
-        Serial.println();
+
+      if(VERBOSE){
+        // If beginning of new byte, print on newline
+        if(idx != 0 && idx % 8 == 0){
+          Serial.println();
+        }
+
+        Serial.print(cur_bit);
       }
 
-      Serial.print(bit);
-    }
-
-    // Create byte array
-    int i = idx % 8;
-    int byteIdx = floor(idx / 8);
-    if(bit){
-      padDataByteArray[byteIdx] |= (1 << (7-i));
-    }
-    if (VERBOSE){
-      // If last bit in the current byte, display byte as ASCII
-      if(i == 7){
-        Serial.print(" - ");
-        Serial.print(byteIdx);
-        Serial.print(" - ");
-        Serial.print(padDataByteArray[byteIdx]);
-        Serial.print(" - ");
-        Serial.write(padDataByteArray[byteIdx]);
+      // Create byte array
+      int i = idx % 8;
+      int byteIdx = floor(idx / 8);
+      if(cur_bit){
+        padDataByteArray[byteIdx] |= (1 << (7-i));
+      }
+      if (VERBOSE){
+        // If last bit in the current byte, display byte as ASCII
+        if(i == 7){
+          Serial.print(" - ");
+          Serial.print(byteIdx);
+          Serial.print(" - ");
+          Serial.print(padDataByteArray[byteIdx]);
+          Serial.print(" - ");
+          Serial.write(padDataByteArray[byteIdx]);
+        }
       }
     }
   }
@@ -322,11 +395,14 @@ void processValidData(int endDataIdx){
   Serial.println("\nDone processing data. Waiting for more input...\n");
 }
 
+// Program startup - print configuration details to user
 void setup (){
   long baudrate = 115200;
   Serial.begin(baudrate);
-  Serial.print("Receiver Program Startup - Baud Rate: ");
+  Serial.print("--- Receiver Program Startup --- \nBaud Rate: ");
   Serial.println(baudrate);
+  Serial.print("Bits per symbol: ");
+  Serial.println(BITS_PER_SYMBOL);
   Serial.println("Waiting for data transmission...\n");
 
   prevValidData = false; // Waiting for frequency trigger to indicate data start
@@ -346,6 +422,7 @@ void loop (){
 
   while (!counterReady){} // Busy loop until count over
 
+  // Uncomment for continuous reporting of frequency detected
   // printCountsData(timerCounts);
 
   // If the current bit is valid
@@ -367,7 +444,9 @@ void loop (){
       // Process valid data acquired
       if(VERBOSE)
         processValidData(timerCountsIdx - 1);
+      // Remove exterior samples of oversampled input frequencies
       int newBitSize = removeTransitions(timerCountsIdx - 1);
+      // Process good data
       processValidData(newBitSize);
     }
   }
