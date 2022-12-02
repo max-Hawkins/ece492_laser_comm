@@ -206,14 +206,16 @@ int removeTransitions(int endDataIdx){
     timerCountsArray[(i - 1) / 4] = averageCounts;
   }
 
-  Serial.println("\nProcessed data:");
-  for(int i=0; i<dataBitSize; i++){
-    Serial.print(dataBitArray[i]);
-    if(i != 0 && i % 8 == 0){
-      Serial.println();
+  if(VERBOSE){
+    Serial.println("\nProcessed data:");
+    for(int i=0; i<dataBitSize; i++){
+      Serial.print(dataBitArray[i]);
+      if(i != 0 && i % 8 == 0){
+        Serial.println();
+      }
     }
+    Serial.println();
   }
-  Serial.println();
 
   return dataBitSize - 1;
 }
@@ -232,15 +234,11 @@ void processValidData(int endDataIdx){
   byte padDataByteArray[padDataByteSize];
 
   // Zero out padDataByteArray TEST
-  Serial.println("---bytes:");
   for(int i=0; i<padDataByteSize; i++){
     padDataByteArray[i] = 0;
   }
-  // Zero out padDataByteArray TEST
-  Serial.println("---bytes:");
-  for(int i=0; i<padDataByteSize; i++){
-    Serial.println(padDataByteArray[i]);
-  }
+
+
 
   if (VERBOSE){
     Serial.print("Pad bit size: ");
@@ -261,11 +259,14 @@ void processValidData(int endDataIdx){
     Serial.println("\nBit representation:");
   }
 
-  // Zero out padDataByteArray TEST
-  Serial.println("---bytes:");
-  for(int i=0; i<padDataByteSize; i++){
-    Serial.println(padDataByteArray[i]);
+  // Display padDataByteArray
+  if(VERBOSE){
+    Serial.println("---bytes:");
+    for(int i=0; i<padDataByteSize; i++){
+      Serial.println(padDataByteArray[i]);
+    }
   }
+
   // Print bit values in byte groups
   for(int idx=0; idx<padDataBitSize; idx++){
     // Padded bits are 0
@@ -305,17 +306,19 @@ void processValidData(int endDataIdx){
     }
   }
 
-  // Zero out padDataByteArray TEST
-  Serial.println("---bytes:");
-  for(int i=0; i<padDataByteSize; i++){
-    Serial.println(padDataByteArray[i]);
+  // Display padDataByteArray
+  if(VERBOSE){
+    Serial.println("---bytes:");
+    for(int i=0; i<padDataByteSize; i++){
+      Serial.println(padDataByteArray[i]);
+    }
   }
 
   if(VERBOSE)
     Serial.println();
 
   // Write bytes to serial port to view ASCII representation
-  Serial.println("\nASCII Encoding:");
+  Serial.println("Received Data:");
   Serial.write(padDataByteArray, padDataByteSize);
   Serial.println();
 
