@@ -4,68 +4,141 @@
 using Markdown
 using InteractiveUtils
 
+# This Pluto notebook uses @bind for interactivity. When running this notebook outside of Pluto, the following 'mock version' of @bind gives bound variables a default value (instead of an error).
+macro bind(def, element)
+    quote
+        local iv = try Base.loaded_modules[Base.PkgId(Base.UUID("6e696c72-6542-2067-7265-42206c756150"), "AbstractPlutoDingetjes")].Bonds.initial_value catch; b -> missing; end
+        local el = $(esc(element))
+        global $(esc(def)) = Core.applicable(Base.get, el) ? Base.get(el) : iv(el)
+        el
+    end
+end
+
 # ╔═╡ cdf339e8-71f7-11ed-3425-cf366bedbc68
-using Plots
+begin
+	using Plots
+	using PlutoUI
+end
+
+# ╔═╡ f36cb24b-a3fa-4282-8e5c-c5510c067119
+md"""
+Base Clock Frequency:
+$(@bind base_clock_freq_input NumberField(0:10000, default=16)) MHz	
+"""
+
+# ╔═╡ 639d0007-176e-4570-9901-377c909ebd4f
+base_clock_freq = base_clock_freq_input * 1e6;
+
+# ╔═╡ cca9376e-fa40-445d-a04f-5bdf49587b33
+begin
+	
+	md"""
+	Lower Frequency Limit:
+	$(@bind lower_freq_input NumberField(0:base_clock_freq / 1000, default=100)) kHz
+	\
+	Upper Frequency Limit:
+	$(@bind upper_freq_input NumberField(0:base_clock_freq / 1000, default=150)) kHz
+	"""
+end
+
+# ╔═╡ dced1391-c944-426a-8f75-631fadba6710
+md"""
+Bits Per Symbol:
+$(@bind bits_per_symbol Select([1,2,3,4,5,6,7,8]))\
+Symbol Rate:
+$(@bind symbol_rate NumberField(0:1e10, default=256)) Hz\
+"""
+
+# ╔═╡ ee7bd2c0-2d42-42db-953a-6bd0ce7124a0
+md"""
+**Bit Rate:
+$(bit_rate = symbol_rate * bits_per_symbol) Hz**
+"""
 
 # ╔═╡ f231bd2e-ace9-4937-ad77-5e78a927cc40
 begin
 	const NANO_CLK_FREQ = 16e6
-	const ocr2a = collect(1:256)
-	const possible_freqs = NANO_CLK_FREQ ./ ((ocr2a .+ 1) * 2)
-end
-
-# ╔═╡ 7929b70c-bad1-44a1-a8b0-548e9d05aca2
-begin
-	upper_freq = 125e3
-	lower_freq = 100e3
-
+	const ocr2a = collect(1:255)
+	const possible_freqs = base_clock_freq ./ ((ocr2a .+ 1) * 2)
+	lower_freq = lower_freq_input * 1000
+	upper_freq = upper_freq_input * 1000
 	function freqToOCR2A(freq)
-		return NANO_CLK_FREQ / (freq * 2) - 1
+		return base_clock_freq / (freq * 2) - 1
 	end
 	
-	upper_ocr2a = freqToOCR2A(upper_freq)
-	lower_ocr2a = freqToOCR2A(lower_freq)
+	upper_ocr2a = Int(ceil(freqToOCR2A(upper_freq)))
+	lower_ocr2a = Int(floor(freqToOCR2A(lower_freq)))
+	nothing
 end
-
-# ╔═╡ c60ddd31-5de3-44a8-ae62-4c54acafc8b3
-(upper_ocr2a, lower_ocr2a)
-
-# ╔═╡ 24610a5c-7891-42bc-83f6-890dec0100c9
-ocr2a
-
-# ╔═╡ c7eb75de-f607-45d7-85a8-5e8b172df9f3
-
-colors = ifelse.((ocr2a .> upper_ocr2a) .&& (ocr2a .< lower_ocr2a), :green, :red)
 
 # ╔═╡ 78618dec-54aa-41cc-98f9-2a68e649d879
 begin
-	sticks((0, 8e6))
+	sticks((0, base_clock_freq / 2),
+			color=:blue,
+			legend=true,
+			title="Possible Output Frequencies",
+			label="")
 	sticks!(ocr2a, 
 		   possible_freqs,
 			xlabel="OCR2A Value",
 			ylabel="Output Frequency",
-			color=:red)
+			color=:blue,
+			label="Possible Frequency")
+	vline!([1], [upper_ocr2a],
+			color=:red,
+			label="Frequency Bounds")
+	vline!([1], [lower_ocr2a],
+			color=:red,
+			label="")
 end
 
 # ╔═╡ 1688fc02-fe85-4e1a-8447-97b0fea6411c
-possible_freqs[79]
+begin
+	ocr2a_full = vcat([0],ocr2a)
+	ocr2a_mask = ifelse.((ocr2a_full .>= upper_ocr2a) .&& (ocr2a_full .<= lower_ocr2a), 1, 0) 
+	num_possible_freqs = sum(ocr2a_mask)
+	nothing
+end
 
-# ╔═╡ 2bba9b4c-02a6-4152-a927-c33c9144f412
-possible_freqs[64]
+# ╔═╡ 0d833f2e-9857-486e-89d9-399d290c6da8
+begin
+	possible_freqs_full = vcat([8e6], possible_freqs)
+	possible_freqs_full[ocr2a_mask.==1]
+	nothing
+end
 
-# ╔═╡ 6dd99474-3d17-4fa8-b446-c5518bf329c0
-possible_freqs[1]
+# ╔═╡ c0eb19bd-d105-44cd-80fa-65431cf777f6
+begin
+	println("Number of Possible Frequencies: $num_possible_freqs\n")
 
-# ╔═╡ 2f9bad64-6a07-4ca2-adc7-2297a42fb7e8
-vcat([0], [1,2,3])
+	valid_ocr2a_freq = collect(zip(ocr2a_full[ocr2a_mask.==1], Int.(round.(possible_freqs_full[ocr2a_mask.==1] ./ 1000))))
+
+	division_idxs = vcat(Int.(round.(collect(size(valid_ocr2a_freq)[1] / bits_per_symbol/2:size(valid_ocr2a_freq)[1] / bits_per_symbol:size(valid_ocr2a_freq)[1]))), [-1])
+	
+	# show(division_idxs)
+	
+	println("Valid Frequencies and OCR2A Values:\n")
+	division_idxs_idx = 1
+	for (idx, ocr2a_freq) in enumerate(reverse(valid_ocr2a_freq))
+		# println(idx)
+		println("OCR2A Value: $(ocr2a_freq[1])  Freq: $(ocr2a_freq[2]) kHz")
+
+		if(idx == division_idxs[division_idxs_idx])
+			println("------ Symbol Division ------")
+			division_idxs_idx += 1
+		end
+	end
+end
 
 # ╔═╡ 00000000-0000-0000-0000-000000000001
 PLUTO_PROJECT_TOML_CONTENTS = """
 [deps]
 Plots = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
+PlutoUI = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
 
 [compat]
 Plots = "~1.36.6"
+PlutoUI = "~0.7.49"
 """
 
 # ╔═╡ 00000000-0000-0000-0000-000000000002
@@ -74,7 +147,13 @@ PLUTO_MANIFEST_TOML_CONTENTS = """
 
 julia_version = "1.8.3"
 manifest_format = "2.0"
-project_hash = "39d0d5866236472d6bc1a58c4e663ea8a2a2e057"
+project_hash = "007fbb57db0277a809224fb92fc2c3ad5ea07613"
+
+[[deps.AbstractPlutoDingetjes]]
+deps = ["Pkg"]
+git-tree-sha1 = "8eaf9f1b4921132a4cff3f36a1d9ba923b14a481"
+uuid = "6e696c72-6542-2067-7265-42206c756150"
+version = "1.1.4"
 
 [[deps.ArgTools]]
 uuid = "0dad84c5-d112-42e6-8d28-ef12dabb789f"
@@ -295,6 +374,24 @@ git-tree-sha1 = "129acf094d168394e80ee1dc4bc06ec835e510a3"
 uuid = "2e76f6c2-a576-52d4-95c1-20adfe4de566"
 version = "2.8.1+1"
 
+[[deps.Hyperscript]]
+deps = ["Test"]
+git-tree-sha1 = "8d511d5b81240fc8e6802386302675bdf47737b9"
+uuid = "47d2ed2b-36de-50cf-bf87-49c2cf4b8b91"
+version = "0.0.4"
+
+[[deps.HypertextLiteral]]
+deps = ["Tricks"]
+git-tree-sha1 = "c47c5fa4c5308f27ccaac35504858d8914e102f9"
+uuid = "ac1192a8-f4b3-4bfe-ba22-af5b92cd3ab2"
+version = "0.9.4"
+
+[[deps.IOCapture]]
+deps = ["Logging", "Random"]
+git-tree-sha1 = "f7be53659ab06ddc986428d3a9dcc95f6fa6705a"
+uuid = "b5f81e59-6552-4d32-b1f0-c071b021bf89"
+version = "0.2.2"
+
 [[deps.IniFile]]
 git-tree-sha1 = "f550e6e32074c939295eb5ea6de31849ac2c9625"
 uuid = "83e8ac13-25f8-5344-8a64-a9f2b223428f"
@@ -457,6 +554,11 @@ git-tree-sha1 = "cedb76b37bc5a6c702ade66be44f831fa23c681e"
 uuid = "e6f89c97-d47a-5376-807f-9c37f3926c36"
 version = "1.0.0"
 
+[[deps.MIMEs]]
+git-tree-sha1 = "65f28ad4b594aebe22157d6fac869786a255b7eb"
+uuid = "6c6e2e6c-3030-632d-7369-2d6c69616d65"
+version = "0.1.4"
+
 [[deps.MacroTools]]
 deps = ["Markdown", "Random"]
 git-tree-sha1 = "42324d08725e200c23d4dfb549e0d5d89dede2d2"
@@ -595,6 +697,12 @@ deps = ["Base64", "Contour", "Dates", "Downloads", "FFMPEG", "FixedPointNumbers"
 git-tree-sha1 = "6a9521b955b816aa500462951aa67f3e4467248a"
 uuid = "91a5bcdd-55d7-5caf-9e0b-520d859cae80"
 version = "1.36.6"
+
+[[deps.PlutoUI]]
+deps = ["AbstractPlutoDingetjes", "Base64", "ColorTypes", "Dates", "FixedPointNumbers", "Hyperscript", "HypertextLiteral", "IOCapture", "InteractiveUtils", "JSON", "Logging", "MIMEs", "Markdown", "Random", "Reexport", "URIs", "UUIDs"]
+git-tree-sha1 = "eadad7b14cf046de6eb41f13c9275e5aa2711ab6"
+uuid = "7f904dfe-b85e-4ff6-b463-dae2292396a8"
+version = "0.7.49"
 
 [[deps.Preferences]]
 deps = ["TOML"]
@@ -738,6 +846,11 @@ deps = ["Random", "Test"]
 git-tree-sha1 = "8a75929dcd3c38611db2f8d08546decb514fcadf"
 uuid = "3bb67fe8-82b1-5028-8e26-92a6c54297fa"
 version = "0.9.9"
+
+[[deps.Tricks]]
+git-tree-sha1 = "6bac775f2d42a611cdfcd1fb217ee719630c4175"
+uuid = "410a4b4d-49e4-4fbc-ab6d-cb71b17b3775"
+version = "0.1.6"
 
 [[deps.URIs]]
 git-tree-sha1 = "ac00576f90d8a259f2c9d823e91d1de3fd44d348"
@@ -994,16 +1107,16 @@ version = "1.4.1+0"
 """
 
 # ╔═╡ Cell order:
-# ╠═cdf339e8-71f7-11ed-3425-cf366bedbc68
-# ╠═f231bd2e-ace9-4937-ad77-5e78a927cc40
-# ╠═7929b70c-bad1-44a1-a8b0-548e9d05aca2
-# ╠═c60ddd31-5de3-44a8-ae62-4c54acafc8b3
-# ╠═24610a5c-7891-42bc-83f6-890dec0100c9
-# ╠═c7eb75de-f607-45d7-85a8-5e8b172df9f3
-# ╠═78618dec-54aa-41cc-98f9-2a68e649d879
-# ╠═1688fc02-fe85-4e1a-8447-97b0fea6411c
-# ╠═2bba9b4c-02a6-4152-a927-c33c9144f412
-# ╠═6dd99474-3d17-4fa8-b446-c5518bf329c0
-# ╠═2f9bad64-6a07-4ca2-adc7-2297a42fb7e8
+# ╟─cdf339e8-71f7-11ed-3425-cf366bedbc68
+# ╟─f36cb24b-a3fa-4282-8e5c-c5510c067119
+# ╟─639d0007-176e-4570-9901-377c909ebd4f
+# ╟─cca9376e-fa40-445d-a04f-5bdf49587b33
+# ╟─dced1391-c944-426a-8f75-631fadba6710
+# ╟─ee7bd2c0-2d42-42db-953a-6bd0ce7124a0
+# ╟─f231bd2e-ace9-4937-ad77-5e78a927cc40
+# ╟─78618dec-54aa-41cc-98f9-2a68e649d879
+# ╟─1688fc02-fe85-4e1a-8447-97b0fea6411c
+# ╟─0d833f2e-9857-486e-89d9-399d290c6da8
+# ╟─c0eb19bd-d105-44cd-80fa-65431cf777f6
 # ╟─00000000-0000-0000-0000-000000000001
 # ╟─00000000-0000-0000-0000-000000000002

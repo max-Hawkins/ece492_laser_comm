@@ -13,7 +13,7 @@
 // Date: Fall 2022
 //----------------------------------------------------------------------------
 
-// Must be 1, 2, 4, or 8
+// Must be 1, 2, 3, or 4
 #define BITS_PER_SYMBOL 1
 
 // Constants
@@ -79,56 +79,72 @@ void setup()
 int symbolToOCR(uint8_t symbol){
   if(BITS_PER_SYMBOL == 1){
     if(symbol){
-        return OCR2AHIGH;
+        return 64; // 123 kHz
       }else{
-        return OCR2ALOW;
+        return 79; // 100 kHz
       }
   } else if(BITS_PER_SYMBOL == 2){
       if(symbol==3){
-        return OCR2AHIGH;
+        return 64; // 123 kHz
       }else if(symbol==2){
-        return OCR2ALOW;
+        return 67; // 118 kHz
       }else if(symbol==1){
-        return OCR2ALOW;
+        return 72; // 110 kHz
       }else if(symbol==0){
-        return OCR2ALOW;
+        return 79; // 100 kHz
+      }
+  } else if(BITS_PER_SYMBOL == 3){
+      if(symbol==7){
+        return 64; // 123 kHz
+      }else if(symbol==6){
+        return 66; // 119 kHz
+      }else if(symbol==5){
+        return 68; // 116 kHz
+      }else if(symbol==4){
+        return 71; // 111 kHz
+      }else if(symbol==3){
+        return 73; // 108 kHz
+      }else if(symbol==2){
+        return 75; // 105 kHz
+      }else if(symbol==1){
+        return 77; // 103 kHz
+      }else if(symbol==0){
+        return 79; // 100 kHz
       }
   } else if(BITS_PER_SYMBOL == 4){
       if(symbol==15){
-        return OCR2AHIGH;
+        return 64; // 123 kHz
       }else if(symbol==14){
-        return OCR2ALOW;
+        return 65; // 121 kHz
       }else if(symbol==13){
-        return OCR2ALOW;
+        return 66; // 119 kHz
       }else if(symbol==12){
-        return OCR2ALOW;
+        return 67; // 118 kHz
       }else if(symbol==11){
-        return OCR2ALOW;
+        return 68; // 116 kHz
       }else if(symbol==10){
-        return OCR2ALOW;
+        return 69; // 114 kHz
       }else if(symbol==9){
-        return OCR2ALOW;
+        return 70; // 113 kHz
       }else if(symbol==8){
-        return OCR2ALOW;
+        return 71; // 111 kHz
       }else if(symbol==7){
-        return OCR2ALOW;
+        return 72; // 110 kHz
       }else if(symbol==6){
-        return OCR2ALOW;
+        return 73; // 108 kHz
       }else if(symbol==5){
-        return OCR2ALOW;
+        return 74; // 107 kHz
       }else if(symbol==4){
-        return OCR2ALOW;
+        return 75; // 105 kHz
       }else if(symbol==3){
-        return OCR2ALOW;
+        return 76; // 104 kHz
       }else if(symbol==2){
-        return OCR2ALOW;
+        return 77; // 103 kHz
       }else if(symbol==1){
-        return OCR2ALOW;
+        return 78; // 101 kHz
       }else if(symbol==0){
-        return OCR2ALOW;
+        return 79; // 100 kHz
       }
-  } else if(BITS_PER_SYMBOL == 8){
-    // TODO: If only C had better metaprogramming capabilities :(
   }
 }
 

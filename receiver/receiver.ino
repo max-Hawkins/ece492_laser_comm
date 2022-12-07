@@ -20,7 +20,7 @@
 // Date: Fall 2022
 //----------------------------------------------------------------------------
 
-// Must be 1, 2, 4, or 8
+// Must be 1, 2, 3, or 4
 #define BITS_PER_SYMBOL 1
 // Print Debug Info
 #define VERBOSE false
@@ -161,51 +161,67 @@ uint8_t freqToSymbol(float freq){
         return 0;
       }
   } else if(BITS_PER_SYMBOL == 2){
-      if(freq > ){
+      if(freq > 120){
         return 3;
-      }else if(freq > ){
+      }else if(freq > 115){
         return 2;
-      }else if(freq > ){
+      }else if(freq > 105){
         return 1;
-      }else if(freq > ){
+      }else{
+        return 0;
+      }
+  } else if(BITS_PER_SYMBOL == 3){
+      if(freq > 121){
+        return 7;
+      }else if(freq > 117){
+        return 6;
+      }else if(freq > 113){
+        return 5;
+      }else if(freq > 109){
+        return 4;
+      }else if(freq > 106){
+        return 3;
+      }else if(freq > 104){
+        return 2;
+      }else if(freq > 101){
+        return 1;
+      }else{
         return 0;
       }
   } else if(BITS_PER_SYMBOL == 4){
-      if(freq > ){
+      if(freq > 122){
         return 15;
-      }else if(freq > ){
+      }else if(freq > 120){
         return 14;
-      }else if(freq > ){
+      }else if(freq > 118){
         return 13;
-      }else if(freq > ){
+      }else if(freq > 117){
         return 12;
-      }else if(freq > ){
+      }else if(freq > 115){
         return 11;
-      }else if(freq > ){
+      }else if(freq > 113){
         return 10;
-      }else if(freq > ){
+      }else if(freq > 112){
         return 9;
-      }else if(freq > ){
+      }else if(freq > 110){
         return 8;
-      }else if(freq > ){
+      }else if(freq > 109){
         return 7;
-      }else if(freq > ){
+      }else if(freq > 107){
         return 6;
-      }else if(freq > ){
+      }else if(freq > 105){
         return 5;
-      }else if(freq > ){
+      }else if(freq > 104){
         return 4;
-      }else if(freq > ){
+      }else if(freq > 103){
         return 3;
-      }else if(freq > ){
+      }else if(freq > 101){
         return 2;
-      }else if(freq > ){
+      }else if(freq > 100){
         return 1;
-      }else if(freq > ){
+      }else{
         return 0;
       }
-  } else if(BITS_PER_SYMBOL == 8){
-    // TODO: If only C had better metaprogramming capabilities :(
   }
 }
 
